@@ -4,9 +4,13 @@ const ctx = canvas.getContext('2d');
 // Game Constants
 const SCREEN_WIDTH = 800;
 const SCREEN_HEIGHT = 600;
-const WORLD_WIDTH = 4000;
+const WORLD_WIDTH = 2268;
 const GROUND_Y = 550;
 const ENEMY_CEILING_Y = 50;
+const DROPZONE_X = 1175;
+const DROPZONE_WIDTH = 100;
+const BULLET_SPAWN_OFFSET_Y = 2;
+const BULLET_SPAWN_OFFSET_X = 15;
 
 canvas.width = SCREEN_WIDTH;
 canvas.height = SCREEN_HEIGHT;
@@ -86,8 +90,8 @@ function drawSprite(ctx, sprite, x, y, scale, colorPrimary, colorSecondary, flip
 
 // Terrain Image
 const terrainImg = new Image();
-terrainImg.src = 'terrain2.jpg';
-const TERRAIN_HEIGHT = 100; // Height of the terrain image strip
+terrainImg.src = 'terrain-loop.jpg';
+const TERRAIN_HEIGHT = 79; // Height of the terrain image strip
 const flameImg = new Image();
 flameImg.src = 'flame.png';
 
@@ -156,7 +160,7 @@ window.addEventListener('keyup', (e) => {
 
 // Game Objects
 const player = {
-    x: 100,
+    x: DROPZONE_X,
     y: 300,
     width: 30,
     height: 35,
@@ -195,7 +199,7 @@ function startGame() {
     gameState = 'PLAYING';
     score = 0;
     lives = 3;
-    player.x = 100;
+    player.x = DROPZONE_X;
     player.y = 300;
     player.vx = 0;
     player.vy = 0;
@@ -253,7 +257,7 @@ function update() {
                 // Let's fix startGame or make a resetPlayer function.
                 // For now, let's manually reset player here to avoid breaking startGame logic which is "New Game"
                 gameState = 'PLAYING';
-                player.x = 100;
+                player.x = DROPZONE_X;
                 player.y = 300;
                 player.vx = 0;
                 player.vy = 0;
@@ -325,8 +329,8 @@ function update() {
         const now = Date.now();
         if (now - player.lastShotTime > player.shootDelay) {
             bullets.push({
-                x: player.x + (player.facingRight ? player.width : 0),
-                y: player.y + player.height / 2,
+                x: player.x + (player.facingRight ? BULLET_SPAWN_OFFSET_X : 0),
+                y: player.y + BULLET_SPAWN_OFFSET_Y,
                 vx: player.facingRight ? 15 : -15,
                 vy: 0,
                 width: 12,
@@ -414,7 +418,10 @@ function update() {
             if (Math.random() < 0.01) m.vx *= -1;
 
             // Pickup logic
-            if (!player.carrying && checkCollision(player, m)) {
+            let distToDrop = Math.abs(m.x - DROPZONE_X);
+            if (distToDrop > WORLD_WIDTH / 2) distToDrop = WORLD_WIDTH - distToDrop;
+
+            if (!player.carrying && checkCollision(player, m) && distToDrop >= DROPZONE_WIDTH / 2) {
                 player.carrying = m;
                 m.state = 'CARRIED';
             }
@@ -423,17 +430,17 @@ function update() {
             m.y = player.y + 10; // Hang below player
 
             // Drop logic (if near Dropzone base)
-            // Let's define Dropzone Base at x=100 (start area)
-            let distToBase = Math.abs(player.x - 100);
+            // Let's define Dropzone Base at DROPZONE_X
+            let distToBase = Math.abs(player.x - DROPZONE_X);
             if (distToBase > WORLD_WIDTH / 2) distToBase = WORLD_WIDTH - distToBase;
 
-            if (distToBase < 50 && player.y > GROUND_Y - 50) {
+            if (distToBase < DROPZONE_WIDTH / 2 && player.y > GROUND_Y - 50) {
                 // Drop safely
                 m.state = 'WALKING';
                 m.y = GROUND_Y - m.height;
                 player.carrying = null;
                 score += 500; // Rescue bonus
-                createExplosion(m.x, m.y); // Sparkle effect
+                // createExplosion(m.x, m.y); // Sparkle effect removed per request
             }
         } else if (m.state === 'FALLING') {
             m.y += 2;
@@ -498,12 +505,12 @@ function draw() {
     drawTerrain();
 
     // Draw Dropzone Base
-    let baseX = 100 - cameraX;
+    let baseX = DROPZONE_X - cameraX;
     if (baseX < -SCREEN_WIDTH) baseX += WORLD_WIDTH;
     if (baseX > SCREEN_WIDTH) baseX -= WORLD_WIDTH;
     if (baseX > -100 && baseX < SCREEN_WIDTH + 100) {
         ctx.fillStyle = '#00f';
-        ctx.fillRect(baseX - 40, GROUND_Y - 10, 80, 10);
+        ctx.fillRect(baseX - DROPZONE_WIDTH / 2, GROUND_Y - 10, DROPZONE_WIDTH, 10);
         ctx.font = '10px monospace';
         ctx.fillStyle = '#fff';
         ctx.fillText('DROPZONE', baseX - 25, GROUND_Y - 15);
@@ -632,7 +639,7 @@ function drawPlayer() {
     }
 
     // Flame
-    if (Math.abs(player.vx) > 0.1 || player.vy < 0) {
+    if (keys['ArrowUp'] || keys['ArrowRight'] || keys['ArrowLeft']) {
         ctx.save();
         ctx.translate(screenX, player.y);
         if (!player.facingRight) {
